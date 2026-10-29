@@ -30,8 +30,9 @@ On the server as root:
 
 ```bash
 cd /usr/local/directadmin/plugins
-git clone (https://github.com/jaco-de-villiers/directadmin-trash-cleaner) trash_cleaner
+git clone https://github.com/jaco-de-villiers/directadmin-trash-cleaner.git trash_cleaner
 cd trash_cleaner && bash scripts/install.sh
+sed -i 's/^installed=.*/installed=yes/; s/^active=.*/active=yes/' plugin.conf
 ```
 
 Or tar it up (`tar czf trash_cleaner.tar.gz -C trash_cleaner .`) and upload it at **Admin → Plugin Manager → Add plugin**.
