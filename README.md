@@ -30,7 +30,7 @@ On the server as root:
 
 ```bash
 cd /usr/local/directadmin/plugins
-git clone <this-repo-url> trash_cleaner
+git clone (https://github.com/jaco-de-villiers/directadmin-trash-cleaner) trash_cleaner
 cd trash_cleaner && bash scripts/install.sh
 ```
 
