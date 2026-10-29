@@ -1,0 +1,87 @@
+#!/bin/bash
+# Author: Jaco De Villiers
+# Trash Cleaner - user level page.
+#  - Default view: scans and shows what is in the trash (nothing is deleted).
+#  - action=clean&token=...: empties every trash location and reports what was freed.
+
+PLUGIN_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$PLUGIN_DIR/lib.sh"
+
+ACTION="$(get_param action)"
+TOKEN="$(get_param token)"
+
+page_style
+echo '<div class="tc-wrap">'
+echo "<h2>$BROOM_SVG Trash Cleaner</h2>"
+
+mapfile -t LOCS < <(list_locations)
+
+# ---------------------------------------------------------------- clean
+if [ "$ACTION" = "clean" ]; then
+	SAVED="$(cat "$TOKEN_FILE" 2>/dev/null)"
+	rm -f "$TOKEN_FILE"
+	if [ -z "$TOKEN" ] || [ "$TOKEN" != "$SAVED" ]; then
+		echo '<p>This clean-up link has expired. Please review the trash again before cleaning.</p>'
+		echo '<p><a class="tc-btn" href="/CMD_PLUGINS/trash_cleaner">Back</a></p></div>'
+		exit 0
+	fi
+
+	TOTAL_B=0; TOTAL_N=0; ROWS=""
+	for line in "${LOCS[@]}"; do
+		IFS='|' read -r type label path <<<"$line"
+		read -r before_b before_n <<<"$(loc_stats "$type" "$path")"
+		[ "$before_n" -gt 0 ] || continue
+		empty_location "$type" "$path"
+		read -r after_b after_n <<<"$(loc_stats "$type" "$path")"
+		freed_b=$((before_b - after_b)); freed_n=$((before_n - after_n))
+		TOTAL_B=$((TOTAL_B + freed_b)); TOTAL_N=$((TOTAL_N + freed_n))
+		unit="files"; [ "$type" = "mail" ] && unit="messages"
+		ROWS+="<tr><td>$(html_escape "$label")</td><td class=\"num\">$freed_n $unit</td><td class=\"num\">$(human_size "$freed_b")</td></tr>"
+	done
+
+	echo "<div class=\"tc-ok\"><strong>Done.</strong> Your trash has been emptied.</div>"
+	echo '<div class="tc-total">'
+	echo "<div class=\"tc-card\"><div class=\"n\">$(human_size "$TOTAL_B")</div><div class=\"l\">Space cleared</div></div>"
+	echo "<div class=\"tc-card\"><div class=\"n\">$TOTAL_N</div><div class=\"l\">Items removed</div></div>"
+	echo '</div>'
+	if [ -n "$ROWS" ]; then
+		echo '<table class="tc-table"><thead><tr><th>Location</th><th class="num">Removed</th><th class="num">Cleared</th></tr></thead><tbody>'
+		echo "$ROWS"
+		echo '</tbody></table>'
+	fi
+	echo '<p class="tc-sub">Mailbox usage figures in DirectAdmin can take a few minutes to update.</p>'
+	echo '<p><a class="tc-btn sec" href="/CMD_PLUGINS/trash_cleaner">Scan again</a></p></div>'
+	exit 0
+fi
+
+# ---------------------------------------------------------------- preview
+echo '<p class="tc-sub">Empties the File Manager trash and the Trash / Deleted Items folder of every mailbox on your account.</p>'
+
+TOTAL_B=0; TOTAL_N=0; ROWS=""
+for line in "${LOCS[@]}"; do
+	IFS='|' read -r type label path <<<"$line"
+	read -r b n <<<"$(loc_stats "$type" "$path")"
+	[ "$n" -gt 0 ] || continue
+	TOTAL_B=$((TOTAL_B + b)); TOTAL_N=$((TOTAL_N + n))
+	unit="files"; [ "$type" = "mail" ] && unit="messages"
+	ROWS+="<tr><td>$(html_escape "$label")</td><td class=\"num\">$n $unit</td><td class=\"num\">$(human_size "$b")</td></tr>"
+done
+
+if [ "$TOTAL_N" -eq 0 ]; then
+	echo '<div class="tc-empty">Nothing to clean - all your trash folders are already empty.</div></div>'
+	exit 0
+fi
+
+NEW_TOKEN="$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+( umask 077; printf '%s' "$NEW_TOKEN" > "$TOKEN_FILE" )
+
+echo '<div class="tc-total">'
+echo "<div class=\"tc-card\"><div class=\"n\">$(human_size "$TOTAL_B")</div><div class=\"l\">Can be cleared</div></div>"
+echo "<div class=\"tc-card\"><div class=\"n\">$TOTAL_N</div><div class=\"l\">Items in trash</div></div>"
+echo '</div>'
+echo '<table class="tc-table"><thead><tr><th>Location</th><th class="num">Items</th><th class="num">Size</th></tr></thead><tbody>'
+echo "$ROWS"
+echo '</tbody></table>'
+echo "<p><a class=\"tc-btn\" href=\"/CMD_PLUGINS/trash_cleaner/index.html?action=clean&amp;token=$NEW_TOKEN\" onclick=\"return confirm('Permanently delete everything listed above? This cannot be undone.');\">$BROOM_SVG Clean now</a></p>"
+echo '<p class="tc-sub">Items are deleted permanently and cannot be restored.</p>'
+echo '</div>'
